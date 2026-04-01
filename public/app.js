@@ -101,6 +101,10 @@ const ui = {
   localPath: qs("#localPath"),
   localList: qs("#localList"),
   localUpBtn: qs("#localUpBtn"),
+  localLimit: qs("#localLimit"),
+  localPrevBtn: qs("#localPrevBtn"),
+  localNextBtn: qs("#localNextBtn"),
+  localPageInfo: qs("#localPageInfo"),
   localNewFolderBtn: qs("#localNewFolderBtn"),
   localNewFileBtn: qs("#localNewFileBtn"),
   localUploadBtn: qs("#localUploadBtn"),
@@ -114,6 +118,10 @@ const ui = {
   remotePath: qs("#remotePath"),
   remoteList: qs("#remoteList"),
   remoteUpBtn: qs("#remoteUpBtn"),
+  remoteLimit: qs("#remoteLimit"),
+  remotePrevBtn: qs("#remotePrevBtn"),
+  remoteNextBtn: qs("#remoteNextBtn"),
+  remotePageInfo: qs("#remotePageInfo"),
   remoteNewFolderBtn: qs("#remoteNewFolderBtn"),
   remoteNewFileBtn: qs("#remoteNewFileBtn"),
   remoteUploadBtn: qs("#remoteUploadBtn"),
@@ -135,6 +143,12 @@ const state = {
   me: null,
   localPath: "/",
   remotePath: "/",
+  localPage: 1,
+  localLimit: 200,
+  localTotal: 0,
+  remotePage: 1,
+  remoteLimit: 200,
+  remoteTotal: 0,
   localItems: [],
   remoteItems: [],
   localSelected: null,
@@ -208,14 +222,65 @@ function renderTable(tbody, items, selectedName, onSelect, onOpenDir) {
   }
 }
 
+function updatePager(side, page, limit, total) {
+  const safeTotal = typeof total === "number" && total >= 0 ? total : 0;
+  const safeLimit = typeof limit === "number" && limit > 0 ? limit : 200;
+  const pageCount = Math.max(1, Math.ceil(safeTotal / safeLimit));
+  const safePage = typeof page === "number" && page > 0 ? Math.min(page, pageCount) : 1;
+
+  if (side === "local") {
+    if (ui.localLimit) ui.localLimit.value = String(safeLimit);
+    if (ui.localPageInfo) ui.localPageInfo.textContent = `Page ${safePage}/${pageCount} • Total ${safeTotal}`;
+    if (ui.localPrevBtn) ui.localPrevBtn.disabled = safePage <= 1;
+    if (ui.localNextBtn) ui.localNextBtn.disabled = safePage >= pageCount;
+  } else {
+    if (ui.remoteLimit) ui.remoteLimit.value = String(safeLimit);
+    if (ui.remotePageInfo) ui.remotePageInfo.textContent = `Page ${safePage}/${pageCount} • Total ${safeTotal}`;
+    if (ui.remotePrevBtn) ui.remotePrevBtn.disabled = safePage <= 1;
+    if (ui.remoteNextBtn) ui.remoteNextBtn.disabled = safePage >= pageCount;
+  }
+}
+
 async function refreshAll() {
-  const local = await api(`/api/local/list?path=${encodeURIComponent(state.localPath)}`);
+  const local = await api(
+    `/api/local/list?path=${encodeURIComponent(state.localPath)}&page=${encodeURIComponent(
+      state.localPage,
+    )}&limit=${encodeURIComponent(state.localLimit)}`,
+  );
   state.localItems = (local && local.items) ? local.items : [];
   ui.localPath.textContent = (local && local.displayPath) ? local.displayPath : state.localPath;
+  state.localTotal = local && typeof local.total === "number" ? local.total : 0;
+  state.localPage = local && typeof local.page === "number" ? local.page : state.localPage;
+  state.localLimit = local && typeof local.limit === "number" ? local.limit : state.localLimit;
+  if (state.localSelected && !state.localItems.find((it) => it.name === state.localSelected.name)) {
+    state.localSelected = null;
+  }
+  updatePager("local", state.localPage, state.localLimit, state.localTotal);
+  if (state.localItems.length === 0 && state.localTotal > 0 && state.localPage > 1) {
+    state.localPage = 1;
+    await refreshAll();
+    return;
+  }
 
-  const remote = await api(`/api/remote/list?path=${encodeURIComponent(state.remotePath)}`);
+  const remote = await api(
+    `/api/remote/list?path=${encodeURIComponent(state.remotePath)}&page=${encodeURIComponent(
+      state.remotePage,
+    )}&limit=${encodeURIComponent(state.remoteLimit)}`,
+  );
   state.remoteItems = (remote && remote.items) ? remote.items : [];
   ui.remotePath.textContent = (remote && remote.path) ? remote.path : state.remotePath;
+  state.remoteTotal = remote && typeof remote.total === "number" ? remote.total : 0;
+  state.remotePage = remote && typeof remote.page === "number" ? remote.page : state.remotePage;
+  state.remoteLimit = remote && typeof remote.limit === "number" ? remote.limit : state.remoteLimit;
+  if (state.remoteSelected && !state.remoteItems.find((it) => it.name === state.remoteSelected.name)) {
+    state.remoteSelected = null;
+  }
+  updatePager("remote", state.remotePage, state.remoteLimit, state.remoteTotal);
+  if (state.remoteItems.length === 0 && state.remoteTotal > 0 && state.remotePage > 1) {
+    state.remotePage = 1;
+    await refreshAll();
+    return;
+  }
 
   renderTable(
     ui.localList,
@@ -229,6 +294,7 @@ async function refreshAll() {
     },
     async (dirName) => {
       state.localPath = ensureLeadingSlash(joinPosix(state.localPath, dirName));
+      state.localPage = 1;
       state.localSelected = null;
       await refreshAll();
       setButtonsEnabled();
@@ -247,6 +313,7 @@ async function refreshAll() {
     },
     async (dirName) => {
       state.remotePath = ensureLeadingSlash(joinPosix(state.remotePath, dirName));
+      state.remotePage = 1;
       state.remoteSelected = null;
       await refreshAll();
       setButtonsEnabled();
@@ -271,6 +338,7 @@ function refreshSelectionHighlight() {
     },
     async (dirName) => {
       state.localPath = ensureLeadingSlash(joinPosix(state.localPath, dirName));
+      state.localPage = 1;
       state.localSelected = null;
       await refreshAll();
       setButtonsEnabled();
@@ -288,6 +356,7 @@ function refreshSelectionHighlight() {
     },
     async (dirName) => {
       state.remotePath = ensureLeadingSlash(joinPosix(state.remotePath, dirName));
+      state.remotePage = 1;
       state.remoteSelected = null;
       await refreshAll();
       setButtonsEnabled();
@@ -319,6 +388,16 @@ async function initSession() {
     ui.remoteHostHint.textContent = `(${state.me.ids.host})`;
     state.localPath = (state.me.local && state.me.local.defaultPath) ? state.me.local.defaultPath : "/";
     state.remotePath = (state.me.ids && state.me.ids.defaultPath) ? state.me.ids.defaultPath : "/";
+    state.localPage = 1;
+    state.remotePage = 1;
+    if (ui.localLimit) {
+      const n = parseInt(ui.localLimit.value, 10);
+      if (n) state.localLimit = n;
+    }
+    if (ui.remoteLimit) {
+      const n = parseInt(ui.remoteLimit.value, 10);
+      if (n) state.remoteLimit = n;
+    }
     showEngine();
     await refreshAll();
   } catch (err) {
@@ -361,14 +440,76 @@ ui.refreshBtn.addEventListener("click", async () => {
   await refreshAll();
 });
 
+if (ui.localPrevBtn) {
+  ui.localPrevBtn.addEventListener("click", async () => {
+    if (state.localPage <= 1) return;
+    state.localPage -= 1;
+    state.localSelected = null;
+    await refreshAll();
+  });
+}
+
+if (ui.localNextBtn) {
+  ui.localNextBtn.addEventListener("click", async () => {
+    const pageCount = Math.max(1, Math.ceil(state.localTotal / state.localLimit));
+    if (state.localPage >= pageCount) return;
+    state.localPage += 1;
+    state.localSelected = null;
+    await refreshAll();
+  });
+}
+
+if (ui.localLimit) {
+  ui.localLimit.addEventListener("change", async () => {
+    const n = parseInt(ui.localLimit.value, 10);
+    if (!n) return;
+    state.localLimit = n;
+    state.localPage = 1;
+    state.localSelected = null;
+    await refreshAll();
+  });
+}
+
+if (ui.remotePrevBtn) {
+  ui.remotePrevBtn.addEventListener("click", async () => {
+    if (state.remotePage <= 1) return;
+    state.remotePage -= 1;
+    state.remoteSelected = null;
+    await refreshAll();
+  });
+}
+
+if (ui.remoteNextBtn) {
+  ui.remoteNextBtn.addEventListener("click", async () => {
+    const pageCount = Math.max(1, Math.ceil(state.remoteTotal / state.remoteLimit));
+    if (state.remotePage >= pageCount) return;
+    state.remotePage += 1;
+    state.remoteSelected = null;
+    await refreshAll();
+  });
+}
+
+if (ui.remoteLimit) {
+  ui.remoteLimit.addEventListener("change", async () => {
+    const n = parseInt(ui.remoteLimit.value, 10);
+    if (!n) return;
+    state.remoteLimit = n;
+    state.remotePage = 1;
+    state.remoteSelected = null;
+    await refreshAll();
+  });
+}
+
 ui.localUpBtn.addEventListener("click", async () => {
   state.localPath = dirnamePosix(state.localPath);
+  state.localPage = 1;
   state.localSelected = null;
   await refreshAll();
 });
 
 ui.remoteUpBtn.addEventListener("click", async () => {
   state.remotePath = dirnamePosix(state.remotePath);
+  state.remotePage = 1;
   state.remoteSelected = null;
   await refreshAll();
 });

@@ -51,6 +51,8 @@ const APP_SESSION_TTL_MS = parseIntOrNaN(
 const APP_UPLOAD_MAX_BYTES = parseIntOrNaN(
   envOrDefault("APP_UPLOAD_MAX_BYTES", String(200 * 1024 * 1024)),
 );
+const APP_LIST_DEFAULT_LIMIT = parseIntOrNaN(envOrDefault("APP_LIST_DEFAULT_LIMIT", "200"));
+const APP_LIST_MAX_LIMIT = parseIntOrNaN(envOrDefault("APP_LIST_MAX_LIMIT", "500"));
 
 const APP_LOGIN_USERNAME = requireEnv("APP_LOGIN_USERNAME");
 const APP_LOGIN_PASSWORD = requireEnv("APP_LOGIN_PASSWORD");
@@ -178,6 +180,48 @@ async function safeStat(p) {
   }
 }
 
+async function mapWithConcurrency(values, concurrency, mapper) {
+  const results = new Array(values.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (true) {
+      const idx = nextIndex;
+      nextIndex += 1;
+      if (idx >= values.length) return;
+      results[idx] = await mapper(values[idx], idx);
+    }
+  }
+
+  const workerCount = Math.max(1, Math.min(concurrency, values.length));
+  const workers = [];
+  for (let i = 0; i < workerCount; i += 1) workers.push(worker());
+  await Promise.all(workers);
+  return results;
+}
+
+function parseListParams(query) {
+  const rawPage = Number.parseInt(String((query && query.page) || "1"), 10);
+  const rawLimit = Number.parseInt(String((query && query.limit) || ""), 10);
+  const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+
+  const defaultLimit =
+    Number.isFinite(APP_LIST_DEFAULT_LIMIT) && APP_LIST_DEFAULT_LIMIT > 0 ? APP_LIST_DEFAULT_LIMIT : 200;
+  const maxLimit = Number.isFinite(APP_LIST_MAX_LIMIT) && APP_LIST_MAX_LIMIT > 0 ? APP_LIST_MAX_LIMIT : 500;
+  const requestedLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : defaultLimit;
+  const limit = Math.min(requestedLimit, maxLimit);
+  const offset = (page - 1) * limit;
+  return { page, limit, offset };
+}
+
+function compareListItems(a, b) {
+  if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
+  const aTime = typeof a.mtimeMs === "number" ? a.mtimeMs : Number.NEGATIVE_INFINITY;
+  const bTime = typeof b.mtimeMs === "number" ? b.mtimeMs : Number.NEGATIVE_INFINITY;
+  if (aTime !== bTime) return bTime - aTime;
+  return String(a.name || "").localeCompare(String(b.name || ""));
+}
+
 async function listLocal(relPath) {
   const dirFsPath = resolveLocalPath(relPath);
   const entries = await fsp.readdir(dirFsPath, { withFileTypes: true });
@@ -192,11 +236,28 @@ async function listLocal(relPath) {
       mtimeMs: st ? st.mtimeMs : null,
     });
   }
-  items.sort((a, b) => {
-    if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
+  items.sort(compareListItems);
   return items;
+}
+
+async function listLocalPaged(relPath, offset, limit) {
+  const dirFsPath = resolveLocalPath(relPath);
+  const entries = await fsp.readdir(dirFsPath, { withFileTypes: true });
+
+  const allItems = await mapWithConcurrency(entries, 50, async (ent) => {
+    const st = await safeStat(path.join(dirFsPath, ent.name));
+    return {
+      name: ent.name,
+      type: ent.isDirectory() ? "dir" : "file",
+      size: st && st.isFile && st.isFile() ? st.size : null,
+      mtimeMs: st ? st.mtimeMs : null,
+    };
+  });
+
+  allItems.sort(compareListItems);
+  const total = allItems.length;
+  const items = allItems.slice(offset, offset + limit);
+  return { items, total };
 }
 
 async function readLocalFile(relPath) {
@@ -306,10 +367,7 @@ async function listRemote(remotePath) {
         size: r.type === "d" ? null : r.size === undefined || r.size === null ? null : r.size,
         mtimeMs: r.modifyTime ? Number(r.modifyTime) : null,
       }));
-      items.sort((a, b) => {
-        if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
+      items.sort(compareListItems);
       return items;
     }
 
@@ -320,10 +378,7 @@ async function listRemote(remotePath) {
       size: r.isDirectory ? null : r.size === undefined || r.size === null ? null : r.size,
       mtimeMs: r.modifiedAt ? r.modifiedAt.getTime() : null,
     }));
-    items.sort((a, b) => {
-      if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
+    items.sort(compareListItems);
     return items;
   });
 }
@@ -566,8 +621,16 @@ router.get("/api/me", requireAuth, (req, res) => {
 router.get("/api/local/list", requireAuth, async (req, res) => {
   try {
     const relPath = normalizeRelPath(req.query.path);
-    const items = await listLocal(relPath);
-    res.json({ path: relPath, displayPath: `${LOCAL_ROOT}${relPath === "/" ? "" : relPath}`, items });
+    const listParams = parseListParams(req.query);
+    const result = await listLocalPaged(relPath, listParams.offset, listParams.limit);
+    res.json({
+      path: relPath,
+      displayPath: `${LOCAL_ROOT}${relPath === "/" ? "" : relPath}`,
+      page: listParams.page,
+      limit: listParams.limit,
+      total: result.total,
+      items: result.items,
+    });
   } catch (err) {
     res.status(400).json({ error: "bad_path", message: errMessage(err) });
   }
@@ -735,8 +798,17 @@ router.get("/api/local/download", requireAuth, async (req, res) => {
 router.get("/api/remote/list", requireAuth, async (req, res) => {
   try {
     const remotePath = normalizeRemotePath(req.query.path);
-    const items = await listRemote(remotePath);
-    res.json({ path: remotePath, items });
+    const listParams = parseListParams(req.query);
+    const all = await listRemote(remotePath);
+    const total = all.length;
+    const items = all.slice(listParams.offset, listParams.offset + listParams.limit);
+    res.json({
+      path: remotePath,
+      page: listParams.page,
+      limit: listParams.limit,
+      total,
+      items,
+    });
   } catch (err) {
     res.status(400).json({ error: "remote_list_failed", message: errMessage(err) });
   }

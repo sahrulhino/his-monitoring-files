@@ -165,6 +165,31 @@ input:focus {
   gap: 10px;
 }
 
+.pagerbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pager-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.select {
+  background: #0b1220;
+  border: 1px solid #243152;
+  color: #e6e9ef;
+  border-radius: 8px;
+  padding: 8px 10px;
+  outline: none;
+}
+
+.select:focus {
+  border-color: #3b82f6;
+}
+
 .path {
   flex: 1;
   background: #0b1220;
@@ -350,4 +375,3 @@ input:focus {
   gap: 10px;
   align-items: center;
 }
-

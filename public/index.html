@@ -75,6 +75,21 @@
                   </button>
                   <div id="localPath" class="path"></div>
                 </div>
+                <div class="pagerbar">
+                  <div class="pager-left">
+                    <span class="muted small">Limit</span>
+                    <select id="localLimit" class="select">
+                      <option value="50">50</option>
+                      <option value="100">100</option>
+                      <option value="200" selected>200</option>
+                      <option value="500">500</option>
+                    </select>
+                  </div>
+                  <div class="spacer"></div>
+                  <button id="localPrevBtn" class="btn btn-secondary" type="button">Prev</button>
+                  <div id="localPageInfo" class="muted small"></div>
+                  <button id="localNextBtn" class="btn btn-secondary" type="button">Next</button>
+                </div>
               </div>
               <div class="pane-actions">
                 <button id="localNewFolderBtn" class="btn btn-secondary" type="button">
@@ -125,6 +140,21 @@
                     Up
                   </button>
                   <div id="remotePath" class="path"></div>
+                </div>
+                <div class="pagerbar">
+                  <div class="pager-left">
+                    <span class="muted small">Limit</span>
+                    <select id="remoteLimit" class="select">
+                      <option value="50">50</option>
+                      <option value="100">100</option>
+                      <option value="200" selected>200</option>
+                      <option value="500">500</option>
+                    </select>
+                  </div>
+                  <div class="spacer"></div>
+                  <button id="remotePrevBtn" class="btn btn-secondary" type="button">Prev</button>
+                  <div id="remotePageInfo" class="muted small"></div>
+                  <button id="remoteNextBtn" class="btn btn-secondary" type="button">Next</button>
                 </div>
               </div>
               <div class="pane-actions">
