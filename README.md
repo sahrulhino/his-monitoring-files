@@ -8,7 +8,7 @@ Aplikasi web 2 panel ala FileZilla:
 
 ## Prasyarat
 
-- Node.js 18+ (disarankan)
+- Node.js 12.22+ (minimum), Node.js 18+ (disarankan)
 - Akses filesystem untuk `LOCAL_ROOT` (mis. `/var/www`)
 - Akses jaringan ke `IDS_HOST` (SFTP/FTP)
 
@@ -94,4 +94,3 @@ location /fileengine/ {
 ```
 
 Jika Anda pakai base path lain, samakan `APP_BASE_PATH` dengan location.
-

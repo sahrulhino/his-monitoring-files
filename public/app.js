@@ -23,15 +23,22 @@ function fmtTime(ms) {
 }
 
 async function api(path, opts) {
-  const res = await fetch(`${BASE}${path}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...(opts?.headers ?? {}) },
-    ...opts,
-  });
-  const isJson = (res.headers.get("content-type") ?? "").includes("application/json");
+  const o = opts || {};
+  const headers = { "Content-Type": "application/json" };
+  if (o.headers) {
+    Object.keys(o.headers).forEach((k) => {
+      headers[k] = o.headers[k];
+    });
+  }
+  const res = await fetch(
+    `${BASE}${path}`,
+    Object.assign({}, o, { credentials: "include", headers }),
+  );
+  const isJson = String(res.headers.get("content-type") || "").includes("application/json");
   const data = isJson ? await res.json().catch(() => null) : null;
   if (!res.ok) {
-    const msg = data?.message || data?.error || `HTTP ${res.status}`;
+    const msg =
+      (data && (data.message || data.error)) ? (data.message || data.error) : `HTTP ${res.status}`;
     const err = new Error(msg);
     err.status = res.status;
     err.data = data;
@@ -48,7 +55,8 @@ async function apiForm(path, formData) {
   });
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    const msg = data?.message || data?.error || `HTTP ${res.status}`;
+    const msg =
+      (data && (data.message || data.error)) ? (data.message || data.error) : `HTTP ${res.status}`;
     const err = new Error(msg);
     err.status = res.status;
     err.data = data;
@@ -202,17 +210,17 @@ function renderTable(tbody, items, selectedName, onSelect, onOpenDir) {
 
 async function refreshAll() {
   const local = await api(`/api/local/list?path=${encodeURIComponent(state.localPath)}`);
-  state.localItems = local.items ?? [];
-  ui.localPath.textContent = local.displayPath ?? state.localPath;
+  state.localItems = (local && local.items) ? local.items : [];
+  ui.localPath.textContent = (local && local.displayPath) ? local.displayPath : state.localPath;
 
   const remote = await api(`/api/remote/list?path=${encodeURIComponent(state.remotePath)}`);
-  state.remoteItems = remote.items ?? [];
-  ui.remotePath.textContent = remote.path ?? state.remotePath;
+  state.remoteItems = (remote && remote.items) ? remote.items : [];
+  ui.remotePath.textContent = (remote && remote.path) ? remote.path : state.remotePath;
 
   renderTable(
     ui.localList,
     state.localItems,
-    state.localSelected?.name ?? null,
+    state.localSelected ? state.localSelected.name : null,
     (it) => {
       state.localSelected = it;
       state.remoteSelected = null;
@@ -230,7 +238,7 @@ async function refreshAll() {
   renderTable(
     ui.remoteList,
     state.remoteItems,
-    state.remoteSelected?.name ?? null,
+    state.remoteSelected ? state.remoteSelected.name : null,
     (it) => {
       state.remoteSelected = it;
       state.localSelected = null;
@@ -249,8 +257,8 @@ async function refreshAll() {
 }
 
 function refreshSelectionHighlight() {
-  const localSelectedName = state.localSelected?.name ?? null;
-  const remoteSelectedName = state.remoteSelected?.name ?? null;
+  const localSelectedName = state.localSelected ? state.localSelected.name : null;
+  const remoteSelectedName = state.remoteSelected ? state.remoteSelected.name : null;
   renderTable(
     ui.localList,
     state.localItems,
@@ -291,7 +299,7 @@ function openEditor(title, side, fullPath, content) {
   state.editor.side = side;
   state.editor.path = fullPath;
   ui.editorTitle.textContent = title;
-  ui.editorArea.value = content ?? "";
+  ui.editorArea.value = content === undefined || content === null ? "" : content;
   ui.editorStatus.textContent = "";
   ui.editorModal.classList.remove("hidden");
   ui.editorArea.focus();
@@ -309,8 +317,8 @@ async function initSession() {
     ui.sessionInfo.textContent = `Login: ${state.me.username}`;
     ui.localRootHint.textContent = `(${state.me.local.root})`;
     ui.remoteHostHint.textContent = `(${state.me.ids.host})`;
-    state.localPath = state.me.local.defaultPath ?? "/";
-    state.remotePath = state.me.ids.defaultPath ?? "/";
+    state.localPath = (state.me.local && state.me.local.defaultPath) ? state.me.local.defaultPath : "/";
+    state.remotePath = (state.me.ids && state.me.ids.defaultPath) ? state.me.ids.defaultPath : "/";
     showEngine();
     await refreshAll();
   } catch (err) {
@@ -458,7 +466,7 @@ ui.remoteUploadBtn.addEventListener("click", () => {
 });
 
 ui.localUploadInput.addEventListener("change", async () => {
-  const file = ui.localUploadInput.files?.[0];
+  const file = ui.localUploadInput.files && ui.localUploadInput.files[0];
   if (!file) return;
   const fd = new FormData();
   fd.append("dir", state.localPath);
@@ -468,7 +476,7 @@ ui.localUploadInput.addEventListener("change", async () => {
 });
 
 ui.remoteUploadInput.addEventListener("change", async () => {
-  const file = ui.remoteUploadInput.files?.[0];
+  const file = ui.remoteUploadInput.files && ui.remoteUploadInput.files[0];
   if (!file) return;
   const fd = new FormData();
   fd.append("dir", state.remotePath);
@@ -564,4 +572,3 @@ ui.toLeftBtn.addEventListener("click", async () => {
 });
 
 initSession();
-

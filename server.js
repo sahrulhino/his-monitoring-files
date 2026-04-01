@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 const fs = require("fs");
-const fsp = require("fs/promises");
+const fsp = fs.promises;
 const path = require("path");
 const { PassThrough, Readable } = require("stream");
 
@@ -216,7 +216,7 @@ async function deleteLocal(relPath) {
   const full = resolveLocalPath(relPath);
   const st = await fsp.stat(full);
   if (st.isDirectory()) {
-    await fsp.rm(full, { recursive: true, force: true });
+    await fsp.rmdir(full, { recursive: true });
     return;
   }
   await fsp.unlink(full);
