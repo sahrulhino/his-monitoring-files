@@ -21,38 +21,50 @@ function requireEnv(name) {
   return value;
 }
 
+function envOrDefault(name, defaultValue) {
+  const v = process.env[name];
+  return v === undefined || v === null || v === "" ? defaultValue : v;
+}
+
+function parseIntOrNaN(value) {
+  const n = Number.parseInt(String(value || ""), 10);
+  return Number.isFinite(n) ? n : Number.NaN;
+}
+
 function normalizeBasePath(value) {
-  const raw = (value ?? "/").trim();
+  const raw = String(value === undefined || value === null ? "/" : value).trim();
   if (raw === "/" || raw === "") return "/";
   const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
   const withoutTrailingSlash = withLeadingSlash.replace(/\/+$/, "");
   return withoutTrailingSlash === "" ? "/" : withoutTrailingSlash;
 }
 
-const APP_PORT = Number.parseInt(process.env.APP_PORT ?? "8099", 10);
-const APP_BASE_PATH = normalizeBasePath(process.env.APP_BASE_PATH);
-const APP_COOKIE_NAME = process.env.APP_COOKIE_NAME ?? "his_files_sid";
+const APP_PORT = parseIntOrNaN(envOrDefault("APP_PORT", "8099"));
+const APP_BASE_PATH = normalizeBasePath(envOrDefault("APP_BASE_PATH", "/"));
+const APP_COOKIE_NAME = envOrDefault("APP_COOKIE_NAME", "his_files_sid");
 const APP_COOKIE_SECURE =
-  (process.env.APP_COOKIE_SECURE ?? "").toLowerCase() === "true" ||
+  String(envOrDefault("APP_COOKIE_SECURE", "")).toLowerCase() === "true" ||
   process.env.NODE_ENV === "production";
-const APP_SESSION_TTL_MS = Number.parseInt(
-  process.env.APP_SESSION_TTL_MS ?? `${12 * 60 * 60 * 1000}`,
-  10,
+const APP_SESSION_TTL_MS = parseIntOrNaN(
+  envOrDefault("APP_SESSION_TTL_MS", String(12 * 60 * 60 * 1000)),
+);
+const APP_UPLOAD_MAX_BYTES = parseIntOrNaN(
+  envOrDefault("APP_UPLOAD_MAX_BYTES", String(200 * 1024 * 1024)),
 );
 
 const APP_LOGIN_USERNAME = requireEnv("APP_LOGIN_USERNAME");
 const APP_LOGIN_PASSWORD = requireEnv("APP_LOGIN_PASSWORD");
 const APP_SESSION_SECRET = requireEnv("APP_SESSION_SECRET");
 
-const LOCAL_ROOT = process.env.LOCAL_ROOT ?? "/var/www";
-const LOCAL_DEFAULT_PATH = process.env.LOCAL_DEFAULT_PATH ?? "/";
+const LOCAL_ROOT = envOrDefault("LOCAL_ROOT", "/var/www");
+const LOCAL_DEFAULT_PATH = envOrDefault("LOCAL_DEFAULT_PATH", "/");
 
-const IDS_PROTOCOL = (process.env.IDS_PROTOCOL ?? "sftp").toLowerCase();
+const IDS_PROTOCOL = String(envOrDefault("IDS_PROTOCOL", "sftp")).toLowerCase();
 const IDS_HOST = requireEnv("IDS_HOST");
-const IDS_PORT = Number.parseInt(process.env.IDS_PORT ?? "", 10);
+const IDS_PORT = parseIntOrNaN(envOrDefault("IDS_PORT", ""));
 const IDS_USERNAME = requireEnv("IDS_USERNAME");
 const IDS_PASSWORD = requireEnv("IDS_PASSWORD");
-const IDS_DEFAULT_PATH = process.env.IDS_DEFAULT_PATH ?? "/";
+const IDS_DEFAULT_PATH = envOrDefault("IDS_DEFAULT_PATH", "/");
 
 const SFTP_PORT_DEFAULT = 22;
 const FTP_PORT_DEFAULT = 21;
@@ -95,7 +107,7 @@ function createSessionId() {
 }
 
 function verifySessionId(value) {
-  const parts = String(value ?? "").split(".");
+  const parts = String(value || "").split(".");
   if (parts.length !== 2) return false;
   const [random, sig] = parts;
   const expected = crypto
@@ -139,7 +151,7 @@ function requireAuth(req, res, next) {
 }
 
 function normalizeRelPath(input) {
-  const raw = String(input ?? "").trim();
+  const raw = String(input || "").trim();
   if (!raw || raw === "/") return "/";
   const withLeading = raw.startsWith("/") ? raw : `/${raw}`;
   const normalized = path.posix.normalize(withLeading);
@@ -176,8 +188,8 @@ async function listLocal(relPath) {
     items.push({
       name: ent.name,
       type: ent.isDirectory() ? "dir" : "file",
-      size: st?.isFile() ? st.size : null,
-      mtimeMs: st?.mtimeMs ?? null,
+      size: st && st.isFile && st.isFile() ? st.size : null,
+      mtimeMs: st ? st.mtimeMs : null,
     });
   }
   items.sort((a, b) => {
@@ -197,7 +209,7 @@ async function readLocalFile(relPath) {
 async function writeLocalFile(relPath, content) {
   const full = resolveLocalPath(relPath);
   await fsp.mkdir(path.dirname(full), { recursive: true });
-  await fsp.writeFile(full, content ?? "", "utf8");
+  await fsp.writeFile(full, content === undefined || content === null ? "" : content, "utf8");
 }
 
 async function deleteLocal(relPath) {
@@ -232,8 +244,8 @@ async function renameLocal(relPath, newName) {
 }
 
 function posixJoin(a, b) {
-  const aa = String(a ?? "");
-  const bb = String(b ?? "");
+  const aa = String(a || "");
+  const bb = String(b || "");
   if (!aa) return bb || "/";
   if (!bb) return aa || "/";
   if (aa.endsWith("/")) return aa + bb.replace(/^\/+/, "");
@@ -241,7 +253,7 @@ function posixJoin(a, b) {
 }
 
 function normalizeRemotePath(input) {
-  const raw = String(input ?? "").trim();
+  const raw = String(input || "").trim();
   if (!raw || raw === "/") return "/";
   const withLeading = raw.startsWith("/") ? raw : `/${raw}`;
   const normalized = path.posix.normalize(withLeading);
@@ -291,7 +303,7 @@ async function listRemote(remotePath) {
       const items = rows.map((r) => ({
         name: r.name,
         type: r.type === "d" ? "dir" : "file",
-        size: r.type === "d" ? null : r.size ?? null,
+        size: r.type === "d" ? null : r.size === undefined || r.size === null ? null : r.size,
         mtimeMs: r.modifyTime ? Number(r.modifyTime) : null,
       }));
       items.sort((a, b) => {
@@ -305,7 +317,7 @@ async function listRemote(remotePath) {
     const items = rows.map((r) => ({
       name: r.name,
       type: r.isDirectory ? "dir" : "file",
-      size: r.isDirectory ? null : r.size ?? null,
+      size: r.isDirectory ? null : r.size === undefined || r.size === null ? null : r.size,
       mtimeMs: r.modifiedAt ? r.modifiedAt.getTime() : null,
     }));
     items.sort((a, b) => {
@@ -341,7 +353,7 @@ async function readRemoteFile(remotePath) {
 
 async function writeRemoteFile(remotePath, content) {
   const p = normalizeRemotePath(remotePath);
-  const buf = Buffer.from(String(content ?? ""), "utf8");
+  const buf = Buffer.from(String(content === undefined || content === null ? "" : content), "utf8");
   return await withRemoteClient(async ({ protocol, client }) => {
     if (protocol === "sftp") {
       await client.put(buf, p);
@@ -456,6 +468,17 @@ function jsonBody(req) {
   });
 }
 
+function errMessage(err) {
+  if (!err) return "";
+  if (typeof err === "string") return err;
+  if (err && typeof err.message === "string") return err.message;
+  return String(err);
+}
+
+function replaceAllLiteral(haystack, needle, replacement) {
+  return String(haystack).split(String(needle)).join(String(replacement));
+}
+
 const app = express();
 app.disable("x-powered-by");
 
@@ -471,11 +494,19 @@ router.get("/", (req, res) => {
   const assetPrefix = APP_BASE_PATH === "/" ? "" : APP_BASE_PATH;
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(
-    indexTemplate
-      .replaceAll("__APP_BASE_PATH_VALUE__", APP_BASE_PATH)
-      .replaceAll("__APP_ASSET_PREFIX__", assetPrefix)
-      .replaceAll("__LOCAL_ROOT_VALUE__", LOCAL_ROOT)
-      .replaceAll("__IDS_HOST_VALUE__", IDS_HOST),
+    replaceAllLiteral(
+      replaceAllLiteral(
+        replaceAllLiteral(
+          replaceAllLiteral(indexTemplate, "__APP_BASE_PATH_VALUE__", APP_BASE_PATH),
+          "__APP_ASSET_PREFIX__",
+          assetPrefix,
+        ),
+        "__LOCAL_ROOT_VALUE__",
+        LOCAL_ROOT,
+      ),
+      "__IDS_HOST_VALUE__",
+      IDS_HOST,
+    ),
   );
 });
 
@@ -484,8 +515,8 @@ router.use("/assets", express.static(publicDir, { maxAge: "1h" }));
 router.post("/api/login", async (req, res) => {
   try {
     const body = await jsonBody(req);
-    const username = String(body.username ?? "");
-    const password = String(body.password ?? "");
+    const username = String((body && body.username) || "");
+    const password = String((body && body.password) || "");
 
     const ok =
       timingSafeEqualStr(username, APP_LOGIN_USERNAME) &&
@@ -538,7 +569,7 @@ router.get("/api/local/list", requireAuth, async (req, res) => {
     const items = await listLocal(relPath);
     res.json({ path: relPath, displayPath: `${LOCAL_ROOT}${relPath === "/" ? "" : relPath}`, items });
   } catch (err) {
-    res.status(400).json({ error: "bad_path", message: String(err?.message ?? err) });
+    res.status(400).json({ error: "bad_path", message: errMessage(err) });
   }
 });
 
@@ -548,7 +579,7 @@ router.get("/api/local/file", requireAuth, async (req, res) => {
     const content = await readLocalFile(relPath);
     res.json({ path: relPath, content });
   } catch (err) {
-    res.status(400).json({ error: "read_failed", message: String(err?.message ?? err) });
+    res.status(400).json({ error: "read_failed", message: errMessage(err) });
   }
 });
 
@@ -559,7 +590,7 @@ router.post("/api/local/save", requireAuth, async (req, res) => {
     await writeLocalFile(relPath, body.content);
     res.json({ ok: true });
   } catch (err) {
-    res.status(400).json({ error: "write_failed", message: String(err?.message ?? err) });
+    res.status(400).json({ error: "write_failed", message: errMessage(err) });
   }
 });
 
@@ -567,7 +598,7 @@ router.post("/api/local/mkdir", requireAuth, async (req, res) => {
   try {
     const body = await jsonBody(req);
     const dir = normalizeRelPath(body.dir);
-    const name = String(body.name ?? "").trim();
+    const name = String((body && body.name) || "").trim();
     if (!name) {
       res.status(400).json({ error: "name_required" });
       return;
@@ -575,7 +606,7 @@ router.post("/api/local/mkdir", requireAuth, async (req, res) => {
     await mkdirLocal(dir, name);
     res.json({ ok: true });
   } catch (err) {
-    res.status(400).json({ error: "mkdir_failed", message: String(err?.message ?? err) });
+    res.status(400).json({ error: "mkdir_failed", message: errMessage(err) });
   }
 });
 
@@ -583,7 +614,7 @@ router.post("/api/local/rename", requireAuth, async (req, res) => {
   try {
     const body = await jsonBody(req);
     const relPath = normalizeRelPath(body.path);
-    const newName = String(body.newName ?? "").trim();
+    const newName = String((body && body.newName) || "").trim();
     if (!newName) {
       res.status(400).json({ error: "new_name_required" });
       return;
@@ -591,7 +622,7 @@ router.post("/api/local/rename", requireAuth, async (req, res) => {
     await renameLocal(relPath, newName);
     res.json({ ok: true });
   } catch (err) {
-    res.status(400).json({ error: "rename_failed", message: String(err?.message ?? err) });
+    res.status(400).json({ error: "rename_failed", message: errMessage(err) });
   }
 });
 
@@ -606,14 +637,16 @@ router.post("/api/local/delete", requireAuth, async (req, res) => {
     await deleteLocal(relPath);
     res.json({ ok: true });
   } catch (err) {
-    res.status(400).json({ error: "delete_failed", message: String(err?.message ?? err) });
+    res.status(400).json({ error: "delete_failed", message: errMessage(err) });
   }
 });
 
 router.post("/api/local/upload", requireAuth, async (req, res) => {
   const bb = Busboy({
     headers: req.headers,
-    limits: { fileSize: Number.parseInt(process.env.APP_UPLOAD_MAX_BYTES ?? `${200 * 1024 * 1024}`, 10) },
+    limits: {
+      fileSize: Number.isFinite(APP_UPLOAD_MAX_BYTES) ? APP_UPLOAD_MAX_BYTES : 200 * 1024 * 1024,
+    },
   });
 
   let targetDirRel = "/";
@@ -630,7 +663,7 @@ router.post("/api/local/upload", requireAuth, async (req, res) => {
       file.resume();
       return;
     }
-    const filename = String(info.filename ?? "").trim();
+    const filename = String((info && info.filename) || "").trim();
     if (!filename) {
       file.resume();
       return;
@@ -658,7 +691,7 @@ router.post("/api/local/upload", requireAuth, async (req, res) => {
     } catch (err) {
       errored = true;
       file.resume();
-      res.status(400).json({ error: "upload_failed", message: String(err?.message ?? err) });
+      res.status(400).json({ error: "upload_failed", message: errMessage(err) });
     }
   });
 
@@ -673,7 +706,7 @@ router.post("/api/local/upload", requireAuth, async (req, res) => {
       await Promise.all(fileOps);
       res.json({ ok: true, saved });
     } catch (err) {
-      res.status(400).json({ error: "upload_failed", message: String(err?.message ?? err) });
+      res.status(400).json({ error: "upload_failed", message: errMessage(err) });
     }
   });
 
@@ -695,7 +728,7 @@ router.get("/api/local/download", requireAuth, async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     fs.createReadStream(full).pipe(res);
   } catch (err) {
-    res.status(400).json({ error: "download_failed", message: String(err?.message ?? err) });
+    res.status(400).json({ error: "download_failed", message: errMessage(err) });
   }
 });
 
@@ -705,7 +738,7 @@ router.get("/api/remote/list", requireAuth, async (req, res) => {
     const items = await listRemote(remotePath);
     res.json({ path: remotePath, items });
   } catch (err) {
-    res.status(400).json({ error: "remote_list_failed", message: String(err?.message ?? err) });
+    res.status(400).json({ error: "remote_list_failed", message: errMessage(err) });
   }
 });
 
@@ -715,7 +748,7 @@ router.get("/api/remote/file", requireAuth, async (req, res) => {
     const content = await readRemoteFile(remotePath);
     res.json({ path: remotePath, content });
   } catch (err) {
-    res.status(400).json({ error: "remote_read_failed", message: String(err?.message ?? err) });
+    res.status(400).json({ error: "remote_read_failed", message: errMessage(err) });
   }
 });
 
@@ -726,7 +759,7 @@ router.post("/api/remote/save", requireAuth, async (req, res) => {
     await writeRemoteFile(remotePath, body.content);
     res.json({ ok: true });
   } catch (err) {
-    res.status(400).json({ error: "remote_write_failed", message: String(err?.message ?? err) });
+    res.status(400).json({ error: "remote_write_failed", message: errMessage(err) });
   }
 });
 
@@ -734,7 +767,7 @@ router.post("/api/remote/mkdir", requireAuth, async (req, res) => {
   try {
     const body = await jsonBody(req);
     const dir = normalizeRemotePath(body.dir);
-    const name = String(body.name ?? "").trim();
+    const name = String((body && body.name) || "").trim();
     if (!name) {
       res.status(400).json({ error: "name_required" });
       return;
@@ -742,7 +775,7 @@ router.post("/api/remote/mkdir", requireAuth, async (req, res) => {
     await mkdirRemote(dir, name);
     res.json({ ok: true });
   } catch (err) {
-    res.status(400).json({ error: "remote_mkdir_failed", message: String(err?.message ?? err) });
+    res.status(400).json({ error: "remote_mkdir_failed", message: errMessage(err) });
   }
 });
 
@@ -750,7 +783,7 @@ router.post("/api/remote/rename", requireAuth, async (req, res) => {
   try {
     const body = await jsonBody(req);
     const remotePath = normalizeRemotePath(body.path);
-    const newName = String(body.newName ?? "").trim();
+    const newName = String((body && body.newName) || "").trim();
     if (!newName) {
       res.status(400).json({ error: "new_name_required" });
       return;
@@ -758,7 +791,7 @@ router.post("/api/remote/rename", requireAuth, async (req, res) => {
     await renameRemote(remotePath, newName);
     res.json({ ok: true });
   } catch (err) {
-    res.status(400).json({ error: "remote_rename_failed", message: String(err?.message ?? err) });
+    res.status(400).json({ error: "remote_rename_failed", message: errMessage(err) });
   }
 });
 
@@ -773,14 +806,16 @@ router.post("/api/remote/delete", requireAuth, async (req, res) => {
     await deleteRemote(remotePath);
     res.json({ ok: true });
   } catch (err) {
-    res.status(400).json({ error: "remote_delete_failed", message: String(err?.message ?? err) });
+    res.status(400).json({ error: "remote_delete_failed", message: errMessage(err) });
   }
 });
 
 router.post("/api/remote/upload", requireAuth, async (req, res) => {
   const bb = Busboy({
     headers: req.headers,
-    limits: { fileSize: Number.parseInt(process.env.APP_UPLOAD_MAX_BYTES ?? `${200 * 1024 * 1024}`, 10) },
+    limits: {
+      fileSize: Number.isFinite(APP_UPLOAD_MAX_BYTES) ? APP_UPLOAD_MAX_BYTES : 200 * 1024 * 1024,
+    },
   });
 
   let targetDir = "/";
@@ -797,7 +832,7 @@ router.post("/api/remote/upload", requireAuth, async (req, res) => {
       file.resume();
       return;
     }
-    const filename = String(info.filename ?? "").trim();
+    const filename = String((info && info.filename) || "").trim();
     if (!filename) {
       file.resume();
       return;
@@ -814,7 +849,7 @@ router.post("/api/remote/upload", requireAuth, async (req, res) => {
         saved += 1;
       }).catch((err) => {
         errored = true;
-        res.status(400).json({ error: "remote_upload_failed", message: String(err?.message ?? err) });
+        res.status(400).json({ error: "remote_upload_failed", message: errMessage(err) });
       }),
     );
   });
@@ -830,7 +865,7 @@ router.post("/api/remote/upload", requireAuth, async (req, res) => {
       await Promise.all(fileOps);
       res.json({ ok: true, saved });
     } catch (err) {
-      res.status(400).json({ error: "remote_upload_failed", message: String(err?.message ?? err) });
+      res.status(400).json({ error: "remote_upload_failed", message: errMessage(err) });
     }
   });
 
@@ -858,7 +893,7 @@ router.get("/api/remote/download", requireAuth, async (req, res) => {
       await client.downloadTo(res, remotePath);
     });
   } catch (err) {
-    res.status(400).json({ error: "remote_download_failed", message: String(err?.message ?? err) });
+    res.status(400).json({ error: "remote_download_failed", message: errMessage(err) });
   }
 });
 
@@ -870,7 +905,7 @@ router.post("/api/transfer/local-to-remote", requireAuth, async (req, res) => {
     const result = await streamLocalToRemote(localPath, remoteDir);
     res.json({ ok: true, ...result });
   } catch (err) {
-    res.status(400).json({ error: "transfer_failed", message: String(err?.message ?? err) });
+    res.status(400).json({ error: "transfer_failed", message: errMessage(err) });
   }
 });
 
@@ -882,7 +917,7 @@ router.post("/api/transfer/remote-to-local", requireAuth, async (req, res) => {
     const result = await streamRemoteToLocal(remotePath, localDir);
     res.json({ ok: true, ...result });
   } catch (err) {
-    res.status(400).json({ error: "transfer_failed", message: String(err?.message ?? err) });
+    res.status(400).json({ error: "transfer_failed", message: errMessage(err) });
   }
 });
 
