@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>HIS File Engine</title>
+    <link rel="shortcut icon" href="https://his.hino.co.id/media/favicon/favicon.ico">
+    <link rel="stylesheet" href="__APP_ASSET_PREFIX__/assets/styles.css" />
+    <script>
+      window.__APP_BASE_PATH__ = "__APP_BASE_PATH_VALUE__";
+      window.__LOCAL_ROOT__ = "__LOCAL_ROOT_VALUE__";
+      window.__IDS_HOST__ = "__IDS_HOST_VALUE__";
+    </script>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">HIS File Engine</div>
+        <div class="topbar-right">
+          <div id="sessionInfo" class="session"></div>
+          <button id="logoutBtn" class="btn btn-secondary hidden" type="button">
+            Logout
+          </button>
+        </div>
+      </header>
+
+      <main class="main">
+        <section id="loginView" class="card login">
+          <h1>Login</h1>
+          <form id="loginForm">
+            <label class="field">
+              <span>Username</span>
+              <input id="loginUsername" autocomplete="username" required />
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input
+                id="loginPassword"
+                type="password"
+                autocomplete="current-password"
+                required
+              />
+            </label>
+            <div class="row">
+              <button class="btn btn-primary" type="submit">Masuk</button>
+              <div id="loginError" class="error"></div>
+            </div>
+          </form>
+        </section>
+
+        <section id="engineView" class="engine hidden">
+          <div class="toolbar">
+            <button id="refreshBtn" class="btn btn-secondary" type="button">
+              Refresh
+            </button>
+            <div class="spacer"></div>
+            <button id="toRightBtn" class="btn btn-primary" type="button">
+              Transfer →
+            </button>
+            <button id="toLeftBtn" class="btn btn-primary" type="button">
+              ← Transfer
+            </button>
+          </div>
+
+          <div class="panes">
+            <section class="pane" id="localPane">
+              <div class="pane-head">
+                <div class="pane-title">
+                  Local
+                  <span id="localRootHint" class="muted"></span>
+                </div>
+                <div class="pathbar">
+                  <button id="localUpBtn" class="btn btn-secondary" type="button">
+                    Up
+                  </button>
+                  <div id="localPath" class="path"></div>
+                </div>
+              </div>
+              <div class="pane-actions">
+                <button id="localNewFolderBtn" class="btn btn-secondary" type="button">
+                  New Folder
+                </button>
+                <button id="localNewFileBtn" class="btn btn-secondary" type="button">
+                  New File
+                </button>
+                <button id="localUploadBtn" class="btn btn-secondary" type="button">
+                  Upload
+                </button>
+                <button id="localEditBtn" class="btn btn-secondary" type="button">
+                  Edit
+                </button>
+                <button id="localRenameBtn" class="btn btn-secondary" type="button">
+                  Rename
+                </button>
+                <button id="localDownloadBtn" class="btn btn-secondary" type="button">
+                  Download
+                </button>
+                <button id="localDeleteBtn" class="btn btn-danger" type="button">
+                  Delete
+                </button>
+                <input id="localUploadInput" class="hidden" type="file" />
+              </div>
+              <div class="pane-body">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th class="name">Name</th>
+                      <th class="size">Size</th>
+                      <th class="mtime">Modified</th>
+                    </tr>
+                  </thead>
+                  <tbody id="localList"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="pane" id="remotePane">
+              <div class="pane-head">
+                <div class="pane-title">
+                  IDS
+                  <span id="remoteHostHint" class="muted"></span>
+                </div>
+                <div class="pathbar">
+                  <button id="remoteUpBtn" class="btn btn-secondary" type="button">
+                    Up
+                  </button>
+                  <div id="remotePath" class="path"></div>
+                </div>
+              </div>
+              <div class="pane-actions">
+                <button id="remoteNewFolderBtn" class="btn btn-secondary" type="button">
+                  New Folder
+                </button>
+                <button id="remoteNewFileBtn" class="btn btn-secondary" type="button">
+                  New File
+                </button>
+                <button id="remoteUploadBtn" class="btn btn-secondary" type="button">
+                  Upload
+                </button>
+                <button id="remoteEditBtn" class="btn btn-secondary" type="button">
+                  Edit
+                </button>
+                <button id="remoteRenameBtn" class="btn btn-secondary" type="button">
+                  Rename
+                </button>
+                <button id="remoteDownloadBtn" class="btn btn-secondary" type="button">
+                  Download
+                </button>
+                <button id="remoteDeleteBtn" class="btn btn-danger" type="button">
+                  Delete
+                </button>
+                <input id="remoteUploadInput" class="hidden" type="file" />
+              </div>
+              <div class="pane-body">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th class="name">Name</th>
+                      <th class="size">Size</th>
+                      <th class="mtime">Modified</th>
+                    </tr>
+                  </thead>
+                  <tbody id="remoteList"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="editorModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div id="editorTitle" class="modal-title"></div>
+          <button id="editorCloseBtn" class="btn btn-secondary" type="button">
+            Close
+          </button>
+        </div>
+        <textarea id="editorArea" class="editor"></textarea>
+        <div class="modal-actions">
+          <div id="editorStatus" class="muted small"></div>
+          <div class="spacer"></div>
+          <button id="editorSaveBtn" class="btn btn-primary" type="button">
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="__APP_ASSET_PREFIX__/assets/app.js"></script>
+  </body>
+</html>
