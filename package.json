@@ -5,7 +5,12 @@
   "type": "commonjs",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop his-monitoring-files",
+    "pm2:restart": "pm2 restart his-monitoring-files",
+    "pm2:logs": "pm2 logs his-monitoring-files --lines 200",
+    "pm2:delete": "pm2 delete his-monitoring-files"
   },
   "dependencies": {
     "basic-ftp": "^5.2.0",

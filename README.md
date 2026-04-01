@@ -78,6 +78,36 @@ Contoh:
 
 - `http://127.0.0.1:8099/fileengine`
 
+## Menjalankan dengan PM2
+
+Install PM2 (sekali saja):
+
+```bash
+npm i -g pm2
+```
+
+Start aplikasi:
+
+```bash
+pm2 start ecosystem.config.js
+pm2 save
+```
+
+Auto start saat server reboot:
+
+```bash
+pm2 startup
+```
+
+Perintah umum:
+
+```bash
+pm2 status
+pm2 logs his-monitoring-files --lines 200
+pm2 restart his-monitoring-files
+pm2 stop his-monitoring-files
+```
+
 ## Setup Nginx (contoh)
 
 Jika domain sudah di-handle Nginx dan ingin expose di path `/fileengine/`:
