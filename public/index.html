@@ -50,9 +50,6 @@
 
         <section id="engineView" class="engine hidden">
           <div class="toolbar">
-            <button id="refreshBtn" class="btn btn-secondary" type="button">
-              Refresh
-            </button>
             <div class="spacer"></div>
             <button id="toRightBtn" class="btn btn-primary" type="button">
               Transfer →
@@ -73,6 +70,9 @@
                   <button id="localUpBtn" class="btn btn-secondary" type="button">
                     Up
                   </button>
+                  <button id="localRefreshBtn" class="btn btn-secondary" type="button">
+                    Refresh
+                  </button>
                   <div id="localPath" class="path"></div>
                 </div>
                 <div class="pagerbar">
@@ -84,6 +84,9 @@
                       <option value="200" selected>200</option>
                       <option value="500">500</option>
                     </select>
+                  </div>
+                  <div class="searchbar">
+                    <input id="localSearch" class="search" placeholder="Search filename..." />
                   </div>
                   <div class="spacer"></div>
                   <button id="localPrevBtn" class="btn btn-secondary" type="button">Prev</button>
@@ -139,6 +142,9 @@
                   <button id="remoteUpBtn" class="btn btn-secondary" type="button">
                     Up
                   </button>
+                  <button id="remoteRefreshBtn" class="btn btn-secondary" type="button">
+                    Refresh
+                  </button>
                   <div id="remotePath" class="path"></div>
                 </div>
                 <div class="pagerbar">
@@ -150,6 +156,9 @@
                       <option value="200" selected>200</option>
                       <option value="500">500</option>
                     </select>
+                  </div>
+                  <div class="searchbar">
+                    <input id="remoteSearch" class="search" placeholder="Search filename..." />
                   </div>
                   <div class="spacer"></div>
                   <button id="remotePrevBtn" class="btn btn-secondary" type="button">Prev</button>

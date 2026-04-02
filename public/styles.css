@@ -177,6 +177,18 @@ input:focus {
   gap: 8px;
 }
 
+.searchbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.search {
+  width: 100%;
+  padding: 8px 10px;
+}
+
 .select {
   background: #0b1220;
   border: 1px solid #243152;

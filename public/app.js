@@ -93,7 +93,6 @@ const ui = {
   loginError: qs("#loginError"),
   sessionInfo: qs("#sessionInfo"),
   logoutBtn: qs("#logoutBtn"),
-  refreshBtn: qs("#refreshBtn"),
   toRightBtn: qs("#toRightBtn"),
   toLeftBtn: qs("#toLeftBtn"),
 
@@ -101,7 +100,9 @@ const ui = {
   localPath: qs("#localPath"),
   localList: qs("#localList"),
   localUpBtn: qs("#localUpBtn"),
+  localRefreshBtn: qs("#localRefreshBtn"),
   localLimit: qs("#localLimit"),
+  localSearch: qs("#localSearch"),
   localPrevBtn: qs("#localPrevBtn"),
   localNextBtn: qs("#localNextBtn"),
   localPageInfo: qs("#localPageInfo"),
@@ -118,7 +119,9 @@ const ui = {
   remotePath: qs("#remotePath"),
   remoteList: qs("#remoteList"),
   remoteUpBtn: qs("#remoteUpBtn"),
+  remoteRefreshBtn: qs("#remoteRefreshBtn"),
   remoteLimit: qs("#remoteLimit"),
+  remoteSearch: qs("#remoteSearch"),
   remotePrevBtn: qs("#remotePrevBtn"),
   remoteNextBtn: qs("#remoteNextBtn"),
   remotePageInfo: qs("#remotePageInfo"),
@@ -146,9 +149,11 @@ const state = {
   localPage: 1,
   localLimit: 200,
   localTotal: 0,
+  localQuery: "",
   remotePage: 1,
   remoteLimit: 200,
   remoteTotal: 0,
+  remoteQuery: "",
   localItems: [],
   remoteItems: [],
   localSelected: null,
@@ -245,7 +250,7 @@ async function refreshAll() {
   const local = await api(
     `/api/local/list?path=${encodeURIComponent(state.localPath)}&page=${encodeURIComponent(
       state.localPage,
-    )}&limit=${encodeURIComponent(state.localLimit)}`,
+    )}&limit=${encodeURIComponent(state.localLimit)}&q=${encodeURIComponent(state.localQuery || "")}`,
   );
   state.localItems = (local && local.items) ? local.items : [];
   ui.localPath.textContent = (local && local.displayPath) ? local.displayPath : state.localPath;
@@ -265,7 +270,7 @@ async function refreshAll() {
   const remote = await api(
     `/api/remote/list?path=${encodeURIComponent(state.remotePath)}&page=${encodeURIComponent(
       state.remotePage,
-    )}&limit=${encodeURIComponent(state.remoteLimit)}`,
+    )}&limit=${encodeURIComponent(state.remoteLimit)}&q=${encodeURIComponent(state.remoteQuery || "")}`,
   );
   state.remoteItems = (remote && remote.items) ? remote.items : [];
   ui.remotePath.textContent = (remote && remote.path) ? remote.path : state.remotePath;
@@ -390,6 +395,8 @@ async function initSession() {
     state.remotePath = (state.me.ids && state.me.ids.defaultPath) ? state.me.ids.defaultPath : "/";
     state.localPage = 1;
     state.remotePage = 1;
+    state.localQuery = ui.localSearch ? String(ui.localSearch.value || "").trim() : "";
+    state.remoteQuery = ui.remoteSearch ? String(ui.remoteSearch.value || "").trim() : "";
     if (ui.localLimit) {
       const n = parseInt(ui.localLimit.value, 10);
       if (n) state.localLimit = n;
@@ -436,9 +443,60 @@ ui.logoutBtn.addEventListener("click", async () => {
   showLogin();
 });
 
-ui.refreshBtn.addEventListener("click", async () => {
-  await refreshAll();
-});
+if (ui.localRefreshBtn) {
+  ui.localRefreshBtn.addEventListener("click", async () => {
+    await refreshAll();
+  });
+}
+
+if (ui.remoteRefreshBtn) {
+  ui.remoteRefreshBtn.addEventListener("click", async () => {
+    await refreshAll();
+  });
+}
+
+let localSearchTimer = null;
+let remoteSearchTimer = null;
+
+if (ui.localSearch) {
+  ui.localSearch.addEventListener("input", () => {
+    if (localSearchTimer) clearTimeout(localSearchTimer);
+    localSearchTimer = setTimeout(async () => {
+      state.localQuery = String(ui.localSearch.value || "").trim();
+      state.localPage = 1;
+      state.localSelected = null;
+      await refreshAll();
+    }, 250);
+  });
+  ui.localSearch.addEventListener("keydown", async (e) => {
+    if (e.key !== "Escape") return;
+    ui.localSearch.value = "";
+    state.localQuery = "";
+    state.localPage = 1;
+    state.localSelected = null;
+    await refreshAll();
+  });
+}
+
+if (ui.remoteSearch) {
+  ui.remoteSearch.addEventListener("input", () => {
+    if (remoteSearchTimer) clearTimeout(remoteSearchTimer);
+    remoteSearchTimer = setTimeout(async () => {
+      state.remoteQuery = String(ui.remoteSearch.value || "").trim();
+      state.remotePage = 1;
+      state.remoteSelected = null;
+      await refreshAll();
+    }, 250);
+  });
+  ui.remoteSearch.addEventListener("keydown", async (e) => {
+    if (e.key !== "Escape") return;
+    ui.remoteSearch.value = "";
+    state.remoteQuery = "";
+    state.remotePage = 1;
+    state.remoteSelected = null;
+    await refreshAll();
+  });
+}
 
 if (ui.localPrevBtn) {
   ui.localPrevBtn.addEventListener("click", async () => {

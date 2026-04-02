@@ -214,6 +214,17 @@ function parseListParams(query) {
   return { page, limit, offset };
 }
 
+function parseSearchQuery(query) {
+  const raw = String((query && (query.q || query.search || query.query)) || "").trim();
+  if (!raw) return "";
+  return raw.length > 200 ? raw.slice(0, 200) : raw;
+}
+
+function nameMatchesQuery(name, qLower) {
+  if (!qLower) return true;
+  return String(name || "").toLowerCase().includes(qLower);
+}
+
 function compareListItems(a, b) {
   if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
   const aTime = typeof a.mtimeMs === "number" ? a.mtimeMs : Number.NEGATIVE_INFINITY;
@@ -240,11 +251,14 @@ async function listLocal(relPath) {
   return items;
 }
 
-async function listLocalPaged(relPath, offset, limit) {
+async function listLocalPaged(relPath, offset, limit, search) {
   const dirFsPath = resolveLocalPath(relPath);
   const entries = await fsp.readdir(dirFsPath, { withFileTypes: true });
 
-  const allItems = await mapWithConcurrency(entries, 50, async (ent) => {
+  const qLower = String(search || "").trim().toLowerCase();
+  const filteredEntries = qLower ? entries.filter((ent) => nameMatchesQuery(ent.name, qLower)) : entries;
+
+  const allItems = await mapWithConcurrency(filteredEntries, 50, async (ent) => {
     const st = await safeStat(path.join(dirFsPath, ent.name));
     return {
       name: ent.name,
@@ -622,13 +636,15 @@ router.get("/api/local/list", requireAuth, async (req, res) => {
   try {
     const relPath = normalizeRelPath(req.query.path);
     const listParams = parseListParams(req.query);
-    const result = await listLocalPaged(relPath, listParams.offset, listParams.limit);
+    const q = parseSearchQuery(req.query);
+    const result = await listLocalPaged(relPath, listParams.offset, listParams.limit, q);
     res.json({
       path: relPath,
       displayPath: `${LOCAL_ROOT}${relPath === "/" ? "" : relPath}`,
       page: listParams.page,
       limit: listParams.limit,
       total: result.total,
+      q,
       items: result.items,
     });
   } catch (err) {
@@ -800,13 +816,17 @@ router.get("/api/remote/list", requireAuth, async (req, res) => {
     const remotePath = normalizeRemotePath(req.query.path);
     const listParams = parseListParams(req.query);
     const all = await listRemote(remotePath);
-    const total = all.length;
-    const items = all.slice(listParams.offset, listParams.offset + listParams.limit);
+    const q = parseSearchQuery(req.query);
+    const qLower = String(q || "").trim().toLowerCase();
+    const filtered = qLower ? all.filter((it) => nameMatchesQuery(it.name, qLower)) : all;
+    const total = filtered.length;
+    const items = filtered.slice(listParams.offset, listParams.offset + listParams.limit);
     res.json({
       path: remotePath,
       page: listParams.page,
       limit: listParams.limit,
       total,
+      q,
       items,
     });
   } catch (err) {
