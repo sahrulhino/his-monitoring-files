@@ -553,6 +553,14 @@ app.disable("x-powered-by");
 
 const router = express.Router();
 
+router.use((req, res, next) => {
+  if (req.path && String(req.path).startsWith("/api/")) {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Pragma", "no-cache");
+  }
+  next();
+});
+
 const publicDir = path.join(__dirname, "public");
 const indexTemplatePath = path.join(publicDir, "index.html");
 const indexTemplate = fs.existsSync(indexTemplatePath)

@@ -32,7 +32,7 @@ async function api(path, opts) {
   }
   const res = await fetch(
     `${BASE}${path}`,
-    Object.assign({}, o, { credentials: "include", headers }),
+    Object.assign({}, o, { credentials: "include", headers, cache: "no-store" }),
   );
   const isJson = String(res.headers.get("content-type") || "").includes("application/json");
   const data = isJson ? await res.json().catch(() => null) : null;
@@ -103,6 +103,7 @@ const ui = {
   localRefreshBtn: qs("#localRefreshBtn"),
   localLimit: qs("#localLimit"),
   localSearch: qs("#localSearch"),
+  localSearchBtn: qs("#localSearchBtn"),
   localPrevBtn: qs("#localPrevBtn"),
   localNextBtn: qs("#localNextBtn"),
   localPageInfo: qs("#localPageInfo"),
@@ -122,6 +123,7 @@ const ui = {
   remoteRefreshBtn: qs("#remoteRefreshBtn"),
   remoteLimit: qs("#remoteLimit"),
   remoteSearch: qs("#remoteSearch"),
+  remoteSearchBtn: qs("#remoteSearchBtn"),
   remotePrevBtn: qs("#remotePrevBtn"),
   remoteNextBtn: qs("#remoteNextBtn"),
   remotePageInfo: qs("#remotePageInfo"),
@@ -455,6 +457,20 @@ if (ui.remoteRefreshBtn) {
   });
 }
 
+async function applyLocalSearch() {
+  state.localQuery = ui.localSearch ? String(ui.localSearch.value || "").trim() : "";
+  state.localPage = 1;
+  state.localSelected = null;
+  await refreshAll();
+}
+
+async function applyRemoteSearch() {
+  state.remoteQuery = ui.remoteSearch ? String(ui.remoteSearch.value || "").trim() : "";
+  state.remotePage = 1;
+  state.remoteSelected = null;
+  await refreshAll();
+}
+
 let localSearchTimer = null;
 let remoteSearchTimer = null;
 
@@ -462,19 +478,26 @@ if (ui.localSearch) {
   ui.localSearch.addEventListener("input", () => {
     if (localSearchTimer) clearTimeout(localSearchTimer);
     localSearchTimer = setTimeout(async () => {
-      state.localQuery = String(ui.localSearch.value || "").trim();
-      state.localPage = 1;
-      state.localSelected = null;
-      await refreshAll();
+      await applyLocalSearch();
     }, 250);
   });
   ui.localSearch.addEventListener("keydown", async (e) => {
+    if (e.key === "Enter") {
+      if (localSearchTimer) clearTimeout(localSearchTimer);
+      await applyLocalSearch();
+      return;
+    }
     if (e.key !== "Escape") return;
     ui.localSearch.value = "";
-    state.localQuery = "";
-    state.localPage = 1;
-    state.localSelected = null;
-    await refreshAll();
+    if (localSearchTimer) clearTimeout(localSearchTimer);
+    await applyLocalSearch();
+  });
+}
+
+if (ui.localSearchBtn) {
+  ui.localSearchBtn.addEventListener("click", async () => {
+    if (localSearchTimer) clearTimeout(localSearchTimer);
+    await applyLocalSearch();
   });
 }
 
@@ -482,19 +505,26 @@ if (ui.remoteSearch) {
   ui.remoteSearch.addEventListener("input", () => {
     if (remoteSearchTimer) clearTimeout(remoteSearchTimer);
     remoteSearchTimer = setTimeout(async () => {
-      state.remoteQuery = String(ui.remoteSearch.value || "").trim();
-      state.remotePage = 1;
-      state.remoteSelected = null;
-      await refreshAll();
+      await applyRemoteSearch();
     }, 250);
   });
   ui.remoteSearch.addEventListener("keydown", async (e) => {
+    if (e.key === "Enter") {
+      if (remoteSearchTimer) clearTimeout(remoteSearchTimer);
+      await applyRemoteSearch();
+      return;
+    }
     if (e.key !== "Escape") return;
     ui.remoteSearch.value = "";
-    state.remoteQuery = "";
-    state.remotePage = 1;
-    state.remoteSelected = null;
-    await refreshAll();
+    if (remoteSearchTimer) clearTimeout(remoteSearchTimer);
+    await applyRemoteSearch();
+  });
+}
+
+if (ui.remoteSearchBtn) {
+  ui.remoteSearchBtn.addEventListener("click", async () => {
+    if (remoteSearchTimer) clearTimeout(remoteSearchTimer);
+    await applyRemoteSearch();
   });
 }
 
