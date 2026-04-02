@@ -30,8 +30,10 @@ async function api(path, opts) {
       headers[k] = o.headers[k];
     });
   }
+  const sep = path.indexOf("?") >= 0 ? "&" : "?";
+  const url = `${BASE}${path}${sep}_t=${Date.now()}`;
   const res = await fetch(
-    `${BASE}${path}`,
+    url,
     Object.assign({}, o, { credentials: "include", headers, cache: "no-store" }),
   );
   const isJson = String(res.headers.get("content-type") || "").includes("application/json");
@@ -234,15 +236,17 @@ function updatePager(side, page, limit, total) {
   const safeLimit = typeof limit === "number" && limit > 0 ? limit : 200;
   const pageCount = Math.max(1, Math.ceil(safeTotal / safeLimit));
   const safePage = typeof page === "number" && page > 0 ? Math.min(page, pageCount) : 1;
+  const q = side === "local" ? String(state.localQuery || "") : String(state.remoteQuery || "");
+  const qText = q ? ` • Filter "${q.length > 40 ? `${q.slice(0, 40)}...` : q}"` : "";
 
   if (side === "local") {
     if (ui.localLimit) ui.localLimit.value = String(safeLimit);
-    if (ui.localPageInfo) ui.localPageInfo.textContent = `Page ${safePage}/${pageCount} • Total ${safeTotal}`;
+    if (ui.localPageInfo) ui.localPageInfo.textContent = `Page ${safePage}/${pageCount} • Total ${safeTotal}${qText}`;
     if (ui.localPrevBtn) ui.localPrevBtn.disabled = safePage <= 1;
     if (ui.localNextBtn) ui.localNextBtn.disabled = safePage >= pageCount;
   } else {
     if (ui.remoteLimit) ui.remoteLimit.value = String(safeLimit);
-    if (ui.remotePageInfo) ui.remotePageInfo.textContent = `Page ${safePage}/${pageCount} • Total ${safeTotal}`;
+    if (ui.remotePageInfo) ui.remotePageInfo.textContent = `Page ${safePage}/${pageCount} • Total ${safeTotal}${qText}`;
     if (ui.remotePrevBtn) ui.remotePrevBtn.disabled = safePage <= 1;
     if (ui.remoteNextBtn) ui.remoteNextBtn.disabled = safePage >= pageCount;
   }

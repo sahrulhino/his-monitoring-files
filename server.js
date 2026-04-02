@@ -569,12 +569,22 @@ const indexTemplate = fs.existsSync(indexTemplatePath)
 
 router.get("/", (req, res) => {
   const assetPrefix = APP_BASE_PATH === "/" ? "" : APP_BASE_PATH;
+  let assetVersion = String(Date.now());
+  try {
+    const appStat = fs.statSync(path.join(publicDir, "app.js"));
+    const cssStat = fs.statSync(path.join(publicDir, "styles.css"));
+    assetVersion = String(Math.max(Number(appStat.mtimeMs) || 0, Number(cssStat.mtimeMs) || 0));
+  } catch {}
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(
     replaceAllLiteral(
       replaceAllLiteral(
         replaceAllLiteral(
-          replaceAllLiteral(indexTemplate, "__APP_BASE_PATH_VALUE__", APP_BASE_PATH),
+          replaceAllLiteral(
+            replaceAllLiteral(indexTemplate, "__APP_BASE_PATH_VALUE__", APP_BASE_PATH),
+            "__APP_ASSET_VERSION__",
+            assetVersion,
+          ),
           "__APP_ASSET_PREFIX__",
           assetPrefix,
         ),
