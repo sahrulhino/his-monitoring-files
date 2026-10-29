@@ -11,7 +11,12 @@ const Busboy = require("busboy");
 const cookie = require("cookie");
 const mime = require("mime-types");
 const SftpClient = require("ssh2-sftp-client");
-const { Client: FtpClient } = require("basic-ftp");
+const {
+  Client: FtpClient,
+  FileInfo,
+  FileType,
+  parseList: defaultParseList,
+} = require("basic-ftp");
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -335,10 +340,119 @@ function normalizeRemotePath(input) {
   return normalized.startsWith("/") ? normalized : "/";
 }
 
+function parseIbmIDateTime(dateStr, timeStr) {
+  const dateParts = String(dateStr || "").split(/[\/\-]/);
+  const timeParts = String(timeStr || "").split(":");
+  if (dateParts.length < 3 || timeParts.length < 2) return undefined;
+  let month = Number(dateParts[0]);
+  let day = Number(dateParts[1]);
+  let year = Number(dateParts[2]);
+  if (!Number.isFinite(month) || !Number.isFinite(day) || !Number.isFinite(year)) {
+    return undefined;
+  }
+  if (year < 100) year += year >= 70 ? 1900 : 2000;
+  const hour = Number(timeParts[0]);
+  const minute = Number(timeParts[1]);
+  const second = timeParts.length > 2 ? Number(timeParts[2]) : 0;
+  const dt = new Date(year, month - 1, day, hour, minute, second);
+  return Number.isNaN(dt.getTime()) ? undefined : dt;
+}
+
+function isIbmIDirectoryType(objType) {
+  const t = String(objType || "").toUpperCase();
+  return t === "*DIR" || t === "*DDIR" || t === "*LIB" || t === "*FLR";
+}
+
+function parseIbmIFtpList(rawList) {
+  const lines = String(rawList || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .filter((line) => !/^(total\b|250[\-\s]|226[\-\s]|FTP)/i.test(line));
+
+  const results = [];
+  for (const line of lines) {
+    // Example:
+    // "     8192 10/29/26  11:30:45 *DIR          Import"
+    // "     1234 10/29/26  11:30:45 *STMF         file.csv"
+    let match = line.match(
+      /^(?:(\d+)\s+)?(?:(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\s+(\d{1,2}:\d{2}(?::\d{2})?)\s+)?(\*[A-Za-z]+)\s+(.+)$/,
+    );
+    if (!match) {
+      // Example: "*DIR          Import/"
+      match = line.match(/^(\*[A-Za-z]+)\s+(.+)$/);
+      if (!match) continue;
+      match = [match[0], undefined, undefined, undefined, match[1], match[2]];
+    }
+
+    const sizeRaw = match[1];
+    const dateStr = match[2];
+    const timeStr = match[3];
+    const objType = match[4];
+    let name = String(match[5] || "").trim().replace(/\/+$/, "");
+    if (!name || name === "." || name === "..") continue;
+
+    const info = new FileInfo(name);
+    const isDir = isIbmIDirectoryType(objType);
+    info.type = isDir ? FileType.Directory : FileType.File;
+    if (!isDir && sizeRaw !== undefined && sizeRaw !== null && sizeRaw !== "") {
+      const size = Number(sizeRaw);
+      if (Number.isFinite(size)) info.size = size;
+    }
+    if (dateStr && timeStr) {
+      const modifiedAt = parseIbmIDateTime(dateStr, timeStr);
+      if (modifiedAt) {
+        info.modifiedAt = modifiedAt;
+        info.rawModifiedAt = `${dateStr} ${timeStr}`;
+      }
+    }
+    results.push(info);
+  }
+  return results;
+}
+
+function createFtpListParser() {
+  return (rawList) => {
+    const raw = String(rawList || "");
+    // IBM i object markers: *DIR, *STMF, *FILE, *LIB, etc.
+    if (/\*[A-Za-z]{2,}\s+\S+/.test(raw)) {
+      const ibmParsed = parseIbmIFtpList(raw);
+      if (ibmParsed.length > 0 || !raw.trim()) {
+        return ibmParsed;
+      }
+    }
+    try {
+      return defaultParseList(raw);
+    } catch (defaultErr) {
+      const ibmParsed = parseIbmIFtpList(raw);
+      if (ibmParsed.length > 0 || !raw.trim()) {
+        return ibmParsed;
+      }
+      throw defaultErr;
+    }
+  };
+}
+
+async function prepareIbmIFtpClient(client) {
+  // IBM i / AS400: use IFS paths and prefer Unix-style LIST for basic-ftp.
+  try {
+    await client.send("SITE NAMEFMT 1");
+  } catch (err) {
+    process.stderr.write(`FTP SITE NAMEFMT 1 failed: ${errMessage(err)}\n`);
+  }
+  try {
+    await client.send("SITE LISTFMT 1");
+  } catch (err) {
+    process.stderr.write(`FTP SITE LISTFMT 1 failed: ${errMessage(err)}\n`);
+  }
+  client.parseList = createFtpListParser();
+}
+
 async function withRemoteClient(fn) {
   if (IDS_PROTOCOL === "ftp") {
     const client = new FtpClient();
-    client.ftp.verbose = false;
+    client.ftp.verbose =
+      String(envOrDefault("IDS_FTP_VERBOSE", "")).toLowerCase() === "true";
     try {
       await client.access({
         host: IDS_HOST,
@@ -347,15 +461,7 @@ async function withRemoteClient(fn) {
         password: IDS_PASSWORD,
         secure: false,
       });
-      // IBM i / AS400 FTP defaults to library naming (NAMEFMT 0).
-      // Switch to IFS naming so Unix-style paths like /PPORTAL/... work.
-      try {
-        await client.send("SITE NAMEFMT 1");
-      } catch (err) {
-        process.stderr.write(
-          `FTP SITE NAMEFMT 1 failed: ${errMessage(err)}\n`,
-        );
-      }
+      await prepareIbmIFtpClient(client);
       return await fn({ protocol: "ftp", client });
     } finally {
       client.close();
