@@ -51,6 +51,9 @@
         <section id="engineView" class="engine hidden">
           <div class="toolbar">
             <div class="spacer"></div>
+            <button id="bulkUploadBtn" class="btn btn-primary" type="button">
+              Bulk Upload →
+            </button>
             <button id="toRightBtn" class="btn btn-primary" type="button">
               Transfer →
             </button>
@@ -224,6 +227,83 @@
           <div class="spacer"></div>
           <button id="editorSaveBtn" class="btn btn-primary" type="button">
             Save
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="bulkModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card modal-card-bulk">
+        <div class="modal-head">
+          <div class="modal-title">Bulk Upload Local → IDS</div>
+          <button id="bulkCloseBtn" class="btn btn-secondary" type="button">
+            Close
+          </button>
+        </div>
+        <div class="bulk-body">
+          <div class="bulk-meta">
+            <div class="bulk-paths">
+              <div>
+                <span class="muted small">Source (local)</span>
+                <div id="bulkLocalDir" class="path"></div>
+              </div>
+              <div>
+                <span class="muted small">Destination (IDS)</span>
+                <div id="bulkRemoteDir" class="path"></div>
+              </div>
+            </div>
+            <label class="field bulk-paste-field">
+              <span>Paste list (BDS + filename, tab/space separated, one per line)</span>
+              <textarea
+                id="bulkListInput"
+                class="bulk-textarea"
+                placeholder="BDS/10/2026/10100&#9;26100935.csv"
+              ></textarea>
+            </label>
+            <div class="row bulk-actions-top">
+              <button id="bulkCheckBtn" class="btn btn-secondary" type="button">
+                Check Files
+              </button>
+              <div id="bulkSummary" class="muted small"></div>
+              <div class="spacer"></div>
+              <button id="bulkConfirmBtn" class="btn btn-primary" type="button" disabled>
+                Confirm Upload
+              </button>
+            </div>
+            <div id="bulkStatus" class="muted small"></div>
+          </div>
+          <div class="bulk-table-wrap">
+            <table class="table bulk-table">
+              <thead>
+                <tr>
+                  <th class="bulk-col-status">Status</th>
+                  <th class="bulk-col-bds">BDS</th>
+                  <th class="bulk-col-file">Filename</th>
+                  <th class="bulk-col-size">Size</th>
+                  <th class="bulk-col-action">Action</th>
+                </tr>
+              </thead>
+              <tbody id="bulkResultList"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="previewModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div id="previewTitle" class="modal-title">Preview</div>
+          <button id="previewCloseBtn" class="btn btn-secondary" type="button">
+            Close
+          </button>
+        </div>
+        <pre id="previewArea" class="editor preview-area"></pre>
+        <div class="modal-actions">
+          <div id="previewStatus" class="muted small"></div>
+          <div class="spacer"></div>
+          <button id="previewCloseBtn2" class="btn btn-secondary" type="button">
+            Close
           </button>
         </div>
       </div>

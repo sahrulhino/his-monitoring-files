@@ -387,3 +387,121 @@ input:focus {
   gap: 10px;
   align-items: center;
 }
+
+.modal-card-bulk {
+  width: min(1200px, 96vw);
+  height: min(88vh, 980px);
+}
+
+.bulk-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.bulk-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bulk-paths {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.bulk-paste-field {
+  margin-bottom: 0;
+}
+
+.bulk-textarea {
+  width: 100%;
+  min-height: 110px;
+  max-height: 160px;
+  resize: vertical;
+  background: #0b1220;
+  border: 1px solid #243152;
+  color: #e6e9ef;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  outline: none;
+}
+
+.bulk-textarea:focus {
+  border-color: #3b82f6;
+}
+
+.bulk-actions-top {
+  flex-wrap: wrap;
+}
+
+.bulk-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #1f2a44;
+  border-radius: 8px;
+}
+
+.bulk-table .bulk-col-status {
+  width: 110px;
+}
+
+.bulk-table .bulk-col-bds {
+  width: 28%;
+}
+
+.bulk-table .bulk-col-file {
+  width: 28%;
+}
+
+.bulk-table .bulk-col-size {
+  width: 90px;
+}
+
+.bulk-table .bulk-col-action {
+  width: 90px;
+}
+
+.bulk-status-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.bulk-status-ready {
+  background: rgba(34, 197, 94, 0.18);
+  color: #86efac;
+}
+
+.bulk-status-missing {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+.bulk-status-ok {
+  background: rgba(59, 130, 246, 0.18);
+  color: #93c5fd;
+}
+
+.bulk-status-fail {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+}
+
+.preview-area {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+  margin: 0;
+}

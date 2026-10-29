@@ -97,6 +97,7 @@ const ui = {
   logoutBtn: qs("#logoutBtn"),
   toRightBtn: qs("#toRightBtn"),
   toLeftBtn: qs("#toLeftBtn"),
+  bulkUploadBtn: qs("#bulkUploadBtn"),
 
   localRootHint: qs("#localRootHint"),
   localPath: qs("#localPath"),
@@ -144,6 +145,24 @@ const ui = {
   editorStatus: qs("#editorStatus"),
   editorCloseBtn: qs("#editorCloseBtn"),
   editorSaveBtn: qs("#editorSaveBtn"),
+
+  bulkModal: qs("#bulkModal"),
+  bulkCloseBtn: qs("#bulkCloseBtn"),
+  bulkLocalDir: qs("#bulkLocalDir"),
+  bulkRemoteDir: qs("#bulkRemoteDir"),
+  bulkListInput: qs("#bulkListInput"),
+  bulkCheckBtn: qs("#bulkCheckBtn"),
+  bulkConfirmBtn: qs("#bulkConfirmBtn"),
+  bulkSummary: qs("#bulkSummary"),
+  bulkStatus: qs("#bulkStatus"),
+  bulkResultList: qs("#bulkResultList"),
+
+  previewModal: qs("#previewModal"),
+  previewTitle: qs("#previewTitle"),
+  previewArea: qs("#previewArea"),
+  previewStatus: qs("#previewStatus"),
+  previewCloseBtn: qs("#previewCloseBtn"),
+  previewCloseBtn2: qs("#previewCloseBtn2"),
 };
 
 const state = {
@@ -163,6 +182,11 @@ const state = {
   localSelected: null,
   remoteSelected: null,
   editor: { side: null, path: null },
+  bulk: {
+    rows: [],
+    checked: false,
+    uploading: false,
+  },
 };
 
 function showLogin() {
@@ -192,6 +216,162 @@ function setButtonsEnabled() {
 
   ui.toRightBtn.disabled = !(state.localSelected && state.localSelected.type === "file");
   ui.toLeftBtn.disabled = !(state.remoteSelected && state.remoteSelected.type === "file");
+  if (ui.bulkUploadBtn) ui.bulkUploadBtn.disabled = false;
+}
+
+function parseBulkListText(text) {
+  const rows = [];
+  const seen = new Set();
+  const lines = String(text || "").split(/\r?\n/);
+  for (const rawLine of lines) {
+    const line = String(rawLine || "").trim();
+    if (!line) continue;
+    let bds = "";
+    let filename = "";
+    if (line.includes("\t")) {
+      const parts = line.split("\t").map((p) => p.trim()).filter(Boolean);
+      if (parts.length >= 2) {
+        bds = parts[0];
+        filename = parts[parts.length - 1];
+      } else if (parts.length === 1) {
+        filename = parts[0];
+      }
+    } else {
+      const parts = line.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2 && /^BDS\//i.test(parts[0])) {
+        bds = parts[0];
+        filename = parts[parts.length - 1];
+      } else {
+        filename = parts[parts.length - 1];
+      }
+    }
+    filename = String(filename || "").replace(/^.*[\\/]/, "").trim();
+    if (!filename) continue;
+    const key = filename.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({
+      bds,
+      filename,
+      exists: null,
+      size: null,
+      mtimeMs: null,
+      path: null,
+      message: null,
+      uploadOk: null,
+      uploadMessage: null,
+    });
+  }
+  return rows;
+}
+
+function openBulkModal() {
+  state.bulk.rows = [];
+  state.bulk.checked = false;
+  state.bulk.uploading = false;
+  ui.bulkLocalDir.textContent = state.localPath || "/";
+  ui.bulkRemoteDir.textContent = state.remotePath || "/";
+  ui.bulkSummary.textContent = "";
+  ui.bulkStatus.textContent =
+    "Paste daftar gagal upload, lalu klik Check Files sebelum Confirm Upload.";
+  ui.bulkConfirmBtn.disabled = true;
+  ui.bulkResultList.innerHTML = "";
+  ui.bulkModal.classList.remove("hidden");
+  ui.bulkListInput.focus();
+}
+
+function closeBulkModal() {
+  if (state.bulk.uploading) return;
+  ui.bulkModal.classList.add("hidden");
+}
+
+function openPreviewModal(title, content, statusText) {
+  ui.previewTitle.textContent = title || "Preview";
+  ui.previewArea.textContent = content === undefined || content === null ? "" : String(content);
+  ui.previewStatus.textContent = statusText || "";
+  ui.previewModal.classList.remove("hidden");
+}
+
+function closePreviewModal() {
+  ui.previewModal.classList.add("hidden");
+  ui.previewArea.textContent = "";
+  ui.previewStatus.textContent = "";
+}
+
+function statusPill(label, className) {
+  const span = document.createElement("span");
+  span.className = `bulk-status-pill ${className}`;
+  span.textContent = label;
+  return span;
+}
+
+function renderBulkResults() {
+  ui.bulkResultList.innerHTML = "";
+  for (const row of state.bulk.rows) {
+    const tr = document.createElement("tr");
+
+    const tdStatus = document.createElement("td");
+    if (row.uploadOk === true) {
+      tdStatus.appendChild(statusPill("Uploaded", "bulk-status-ok"));
+    } else if (row.uploadOk === false) {
+      tdStatus.appendChild(statusPill("Fail", "bulk-status-fail"));
+      tdStatus.title = row.uploadMessage || "";
+    } else if (row.exists === true) {
+      tdStatus.appendChild(statusPill("Ready", "bulk-status-ready"));
+    } else if (row.exists === false) {
+      tdStatus.appendChild(statusPill("Missing", "bulk-status-missing"));
+      tdStatus.title = row.message || "";
+    } else {
+      tdStatus.textContent = "-";
+    }
+    tr.appendChild(tdStatus);
+
+    const tdBds = document.createElement("td");
+    tdBds.textContent = row.bds || "-";
+    tr.appendChild(tdBds);
+
+    const tdFile = document.createElement("td");
+    tdFile.textContent = row.filename;
+    tr.appendChild(tdFile);
+
+    const tdSize = document.createElement("td");
+    tdSize.textContent = row.exists ? fmtBytes(row.size) : "-";
+    tr.appendChild(tdSize);
+
+    const tdAction = document.createElement("td");
+    const viewBtn = document.createElement("button");
+    viewBtn.type = "button";
+    viewBtn.className = "btn btn-secondary";
+    viewBtn.textContent = "View";
+    viewBtn.disabled = row.exists !== true;
+    viewBtn.addEventListener("click", async () => {
+      viewBtn.disabled = true;
+      try {
+        const localPath = ensureLeadingSlash(joinPosix(state.localPath, row.filename));
+        const data = await api(`/api/local/file?path=${encodeURIComponent(localPath)}`);
+        openPreviewModal(
+          `${row.filename}${row.bds ? ` • ${row.bds}` : ""}`,
+          data && data.content != null ? data.content : "",
+          `Path: ${localPath}`,
+        );
+      } catch (err) {
+        openPreviewModal(row.filename, "", `Error: ${err.message}`);
+      } finally {
+        viewBtn.disabled = row.exists !== true;
+      }
+    });
+    tdAction.appendChild(viewBtn);
+    tr.appendChild(tdAction);
+
+    ui.bulkResultList.appendChild(tr);
+  }
+
+  const readyCount = state.bulk.rows.filter((r) => r.exists === true).length;
+  const missingCount = state.bulk.rows.filter((r) => r.exists === false).length;
+  ui.bulkSummary.textContent = state.bulk.checked
+    ? `Parsed ${state.bulk.rows.length} • Ready ${readyCount} • Missing ${missingCount}`
+    : `Parsed ${state.bulk.rows.length}`;
+  ui.bulkConfirmBtn.disabled = !(state.bulk.checked && readyCount > 0 && !state.bulk.uploading);
 }
 
 function renderTable(tbody, items, selectedName, onSelect, onOpenDir) {
@@ -803,5 +983,150 @@ ui.toLeftBtn.addEventListener("click", async () => {
     ui.toLeftBtn.disabled = false;
   }
 });
+
+if (ui.bulkUploadBtn) {
+  ui.bulkUploadBtn.addEventListener("click", () => {
+    openBulkModal();
+  });
+}
+
+if (ui.bulkCloseBtn) {
+  ui.bulkCloseBtn.addEventListener("click", () => {
+    closeBulkModal();
+  });
+}
+
+if (ui.bulkListInput) {
+  ui.bulkListInput.addEventListener("input", () => {
+    state.bulk.checked = false;
+    ui.bulkConfirmBtn.disabled = true;
+    ui.bulkStatus.textContent = "List berubah. Klik Check Files lagi sebelum upload.";
+  });
+}
+
+if (ui.bulkCheckBtn) {
+  ui.bulkCheckBtn.addEventListener("click", async () => {
+    const parsed = parseBulkListText(ui.bulkListInput.value);
+    state.bulk.rows = parsed;
+    state.bulk.checked = false;
+    renderBulkResults();
+    if (parsed.length === 0) {
+      ui.bulkStatus.textContent = "List kosong / format tidak dikenali.";
+      ui.bulkConfirmBtn.disabled = true;
+      return;
+    }
+
+    ui.bulkCheckBtn.disabled = true;
+    ui.bulkConfirmBtn.disabled = true;
+    ui.bulkStatus.textContent = "Checking files...";
+    try {
+      const data = await api("/api/local/check-files", {
+        method: "POST",
+        body: JSON.stringify({
+          dir: state.localPath,
+          files: parsed.map((r) => r.filename),
+        }),
+      });
+      const byName = new Map();
+      for (const item of (data && data.results) || []) {
+        byName.set(String(item.name || "").toLowerCase(), item);
+      }
+      for (const row of state.bulk.rows) {
+        const found = byName.get(row.filename.toLowerCase());
+        if (!found) {
+          row.exists = false;
+          row.message = "missing";
+          continue;
+        }
+        row.exists = !!found.exists;
+        row.size = found.size;
+        row.mtimeMs = found.mtimeMs;
+        row.path = found.path;
+        row.message = found.message;
+        row.uploadOk = null;
+        row.uploadMessage = null;
+      }
+      state.bulk.checked = true;
+      renderBulkResults();
+      const readyCount = state.bulk.rows.filter((r) => r.exists).length;
+      const missingCount = state.bulk.rows.length - readyCount;
+      ui.bulkStatus.textContent =
+        missingCount > 0
+          ? `Check selesai. ${readyCount} ready, ${missingCount} missing. Preview dulu, lalu Confirm Upload untuk file yang ready.`
+          : `Check selesai. Semua ${readyCount} file ready. Bisa preview, lalu Confirm Upload.`;
+    } catch (err) {
+      ui.bulkStatus.textContent = `Check gagal: ${err.message}`;
+      ui.bulkConfirmBtn.disabled = true;
+    } finally {
+      ui.bulkCheckBtn.disabled = false;
+    }
+  });
+}
+
+if (ui.bulkConfirmBtn) {
+  ui.bulkConfirmBtn.addEventListener("click", async () => {
+    const readyRows = state.bulk.rows.filter((r) => r.exists === true);
+    if (!state.bulk.checked || readyRows.length === 0) return;
+
+    const missingCount = state.bulk.rows.filter((r) => r.exists === false).length;
+    const confirmMsg =
+      missingCount > 0
+        ? `Upload ${readyRows.length} file ready ke IDS?\n(${missingCount} missing akan dilewati)`
+        : `Upload ${readyRows.length} file ke IDS folder:\n${state.remotePath}`;
+    if (!window.confirm(confirmMsg)) return;
+
+    state.bulk.uploading = true;
+    ui.bulkConfirmBtn.disabled = true;
+    ui.bulkCheckBtn.disabled = true;
+    ui.bulkCloseBtn.disabled = true;
+    ui.bulkStatus.textContent = `Uploading 0/${readyRows.length}...`;
+
+    try {
+      const data = await api("/api/transfer/local-to-remote-bulk", {
+        method: "POST",
+        body: JSON.stringify({
+          localDir: state.localPath,
+          remoteDir: state.remotePath,
+          files: readyRows.map((r) => r.filename),
+        }),
+      });
+      const byName = new Map();
+      for (const item of (data && data.results) || []) {
+        byName.set(String(item.name || "").toLowerCase(), item);
+      }
+      for (const row of state.bulk.rows) {
+        if (row.exists !== true) continue;
+        const result = byName.get(row.filename.toLowerCase());
+        if (!result) {
+          row.uploadOk = false;
+          row.uploadMessage = "no_result";
+          continue;
+        }
+        row.uploadOk = !!result.ok;
+        row.uploadMessage = result.message;
+      }
+      renderBulkResults();
+      const okCount = data && typeof data.okCount === "number" ? data.okCount : 0;
+      const failCount = data && typeof data.failCount === "number" ? data.failCount : 0;
+      ui.bulkStatus.textContent = `Upload selesai. Success ${okCount}, failed ${failCount}.`;
+      await refreshAll();
+    } catch (err) {
+      ui.bulkStatus.textContent = `Upload gagal: ${err.message}`;
+    } finally {
+      state.bulk.uploading = false;
+      ui.bulkCheckBtn.disabled = false;
+      ui.bulkCloseBtn.disabled = false;
+      const readyCount = state.bulk.rows.filter((r) => r.exists === true).length;
+      ui.bulkConfirmBtn.disabled = !(state.bulk.checked && readyCount > 0);
+    }
+  });
+}
+
+if (ui.previewCloseBtn) {
+  ui.previewCloseBtn.addEventListener("click", () => closePreviewModal());
+}
+if (ui.previewCloseBtn2) {
+  ui.previewCloseBtn2.addEventListener("click", () => closePreviewModal());
+}
 
 initSession();

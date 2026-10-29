@@ -635,6 +635,111 @@ async function streamLocalToRemote(localPathRel, remoteDir) {
   });
 }
 
+function sanitizeFileNameOnly(input) {
+  const name = path.posix.basename(String(input || "").trim());
+  if (!name || name === "." || name === "..") return "";
+  if (name.includes("\\") || name.includes("\0")) return "";
+  return name;
+}
+
+async function checkLocalFiles(dirRelPath, fileNames) {
+  const dir = normalizeRelPath(dirRelPath);
+  const uniqueNames = [];
+  const seen = new Set();
+  for (const raw of fileNames || []) {
+    const name = sanitizeFileNameOnly(raw);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    uniqueNames.push(name);
+  }
+  if (uniqueNames.length > 500) {
+    throw new Error("Max 500 files per check");
+  }
+
+  const results = [];
+  for (const name of uniqueNames) {
+    const relPath = normalizeRelPath(posixJoin(dir, name));
+    try {
+      const full = resolveLocalPath(relPath);
+      const st = await safeStat(full);
+      if (!st || !st.isFile()) {
+        results.push({
+          name,
+          path: relPath,
+          exists: false,
+          size: null,
+          mtimeMs: null,
+          message: st ? "not_a_file" : "missing",
+        });
+        continue;
+      }
+      results.push({
+        name,
+        path: relPath,
+        exists: true,
+        size: st.size,
+        mtimeMs: st.mtimeMs,
+        message: null,
+      });
+    } catch (err) {
+      results.push({
+        name,
+        path: relPath,
+        exists: false,
+        size: null,
+        mtimeMs: null,
+        message: errMessage(err),
+      });
+    }
+  }
+  return results;
+}
+
+async function streamLocalFilesToRemote(localDirRel, remoteDir, fileNames) {
+  const localDir = normalizeRelPath(localDirRel);
+  const remoteD = normalizeRemotePath(remoteDir);
+  const names = [];
+  const seen = new Set();
+  for (const raw of fileNames || []) {
+    const name = sanitizeFileNameOnly(raw);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    names.push(name);
+  }
+  if (names.length === 0) return [];
+  if (names.length > 500) throw new Error("Max 500 files per bulk upload");
+
+  return await withRemoteClient(async ({ protocol, client }) => {
+    const results = [];
+    for (const name of names) {
+      const localRel = normalizeRelPath(posixJoin(localDir, name));
+      const remoteTarget = normalizeRemotePath(posixJoin(remoteD, name));
+      try {
+        const localFs = resolveLocalPath(localRel);
+        const st = await fsp.stat(localFs);
+        if (!st.isFile()) {
+          results.push({ name, ok: false, message: "not_a_file", savedAs: null });
+          continue;
+        }
+        if (protocol === "sftp") {
+          await client.put(fs.createReadStream(localFs), remoteTarget);
+        } else {
+          await client.uploadFrom(fs.createReadStream(localFs), remoteTarget);
+        }
+        results.push({ name, ok: true, message: null, savedAs: name });
+      } catch (err) {
+        results.push({
+          name,
+          ok: false,
+          message: errMessage(err),
+          savedAs: null,
+        });
+      }
+    }
+    return results;
+  });
+}
+
 function jsonBody(req) {
   return new Promise((resolve, reject) => {
     let raw = "";
@@ -1131,6 +1236,47 @@ router.post("/api/transfer/local-to-remote", requireAuth, async (req, res) => {
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(400).json({ error: "transfer_failed", message: errMessage(err) });
+  }
+});
+
+router.post("/api/local/check-files", requireAuth, async (req, res) => {
+  try {
+    const body = await jsonBody(req);
+    const dir = normalizeRelPath(body.dir);
+    const files = Array.isArray(body.files) ? body.files : [];
+    const results = await checkLocalFiles(dir, files);
+    const readyCount = results.filter((r) => r.exists).length;
+    res.json({
+      dir,
+      total: results.length,
+      readyCount,
+      missingCount: results.length - readyCount,
+      results,
+    });
+  } catch (err) {
+    res.status(400).json({ error: "check_failed", message: errMessage(err) });
+  }
+});
+
+router.post("/api/transfer/local-to-remote-bulk", requireAuth, async (req, res) => {
+  try {
+    const body = await jsonBody(req);
+    const localDir = normalizeRelPath(body.localDir);
+    const remoteDir = normalizeRemotePath(body.remoteDir);
+    const files = Array.isArray(body.files) ? body.files : [];
+    const results = await streamLocalFilesToRemote(localDir, remoteDir, files);
+    const okCount = results.filter((r) => r.ok).length;
+    res.json({
+      ok: okCount === results.length,
+      localDir,
+      remoteDir,
+      total: results.length,
+      okCount,
+      failCount: results.length - okCount,
+      results,
+    });
+  } catch (err) {
+    res.status(400).json({ error: "bulk_transfer_failed", message: errMessage(err) });
   }
 });
 
