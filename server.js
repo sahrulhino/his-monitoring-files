@@ -347,6 +347,15 @@ async function withRemoteClient(fn) {
         password: IDS_PASSWORD,
         secure: false,
       });
+      // IBM i / AS400 FTP defaults to library naming (NAMEFMT 0).
+      // Switch to IFS naming so Unix-style paths like /PPORTAL/... work.
+      try {
+        await client.send("SITE NAMEFMT 1");
+      } catch (err) {
+        process.stderr.write(
+          `FTP SITE NAMEFMT 1 failed: ${errMessage(err)}\n`,
+        );
+      }
       return await fn({ protocol: "ftp", client });
     } finally {
       client.close();
